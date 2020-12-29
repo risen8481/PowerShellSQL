@@ -25,9 +25,16 @@ function Clean-LDAPUsersTable($OpenSQLConnection){
 
     $sqlCommand.Connection = $OpenSQLConnection
 
-    $sqlCommand.CommandText = "TRUNCATE TABLE dbo.DimCurrency"
+    $sqlCommand.CommandText = "TRUNCATE TABLE [Testowa].[dbo].[DimCurrency]"
 
-    $sqlCommand.ExecuteNonQuery()
+    try{
+        $sqlCommand.ExecuteNonQuery()
+    }
+    catch{
+        Write-Host "An error occurred:"
+        Write-Host $_.ScriptStackTrace
+    }
+    
 
 }
 
@@ -56,6 +63,7 @@ function Do-IAMInsertRowByRow ($OpenSQLConnection, $IAMds) {
 
     $sqlCommand.Parameters.Add((New-Object Data.SqlClient.SqlParameter("@CurrencyName",[Data.SQLDBType]::NVarChar, 50))) | Out-Null
 
+    $sqlCommand.Transaction = $OpenSQLConnection.BeginTransaction()
    
     foreach ($Row in $IAMds.Rows) {
 
@@ -69,13 +77,25 @@ function Do-IAMInsertRowByRow ($OpenSQLConnection, $IAMds) {
 
         # Run the query and get the scope ID back into $InsertedID
 
-        $InsertedID = $sqlCommand.ExecuteNonQuery()
+      
+        try { 
+            
+            $sqlCommand.ExecuteNonQuery()
+            
+        }
+        catch {
+        Write-Host "An error occurred:"
+        Write-Host $_.ScriptStackTrace
 
-        # Write to the console.
+        $sqlCommand.Transaction.Rollback()
+        
+        Exit
 
-        #"Inserted row ID $InsertedID for IAM data row " + $Row[0]
+        }
 
     }
+
+    $sqlCommand.Transaction.Commit()
 
 }
  <# Execute import data #>
@@ -100,11 +120,9 @@ if ($sqlConnection.State -ne [Data.ConnectionState]::Open) {
 }
 
 
-# Call the function that does the inserts.
+# Call the function that does the inserts and function for clean LDAPUsers.
 Clean-LDAPUsersTable $sqlConnection
 Do-IAMInsertRowByRow $sqlConnection $ds
-
- 
 
 # Close the connection.
 
